@@ -177,3 +177,56 @@ rmse_by_var <- function(f) sqrt(colMeans((actual - f)^2))
 rmse_by_var(fc_var1)
 rmse_by_var(fc_var4)
 # The VAR 1 forecasts better in all eight variables besides inflation, but it's still very close. The smaller model forecasts better because it contains less parameters. The VAR 4 contains more noise that is not useful in forecasting the data.
+
+bvar_cv <- function(lambda) {
+  pr <- bv_priors(hyper = "lambda",
+                  mn = bv_mn(lambda = bv_lambda(mode = lambda, sd = 0.4,
+                                                min = 0.999 * lambda,
+                                                max = 1.001 * lambda),
+                             b = 0))
+  fc <- NULL
+  for (T in origins) {
+    fit_T <- bvar(y[1:T, ], lags = 4, priors = pr,
+                  n_draw = 2000, n_burn = 1000, verbose = FALSE)
+    x <- c(1, t(y[T:(T - 3), ]))         # constant and 4 lags of each variable
+    fc <- rbind(fc, x %*% coef(fit_T))   # forecast of y_{T+1}
+  }
+  fc
+}
+
+set.seed(422)
+fc_bvar_03 <- bvar_cv(0.3)
+saveRDS(fc_bvar_03, "results/fc_bvar_03.rds")
+
+
+set.seed(422)
+fc_bvar_005 <- bvar_cv(0.05)
+
+var_results <- tibble(
+  Variable = colnames(y),
+  `VAR(1)` = rmse_by_var(fc_var1),
+  `VAR(4)` = rmse_by_var(fc_var4),
+  `BVAR(4), lambda = 0.3` = rmse_by_var(fc_bvar_03),
+  `BVAR(4), lambda = 0.05` = rmse_by_var(fc_bvar_005)
+)
+
+saveRDS(var_results, "results/var_results.rds")
+
+var_results |> knitr::kable(digits = 3)
+
+## readRDS("results/var_results.rds") |>
+##  knitr::kable(digits = 3))
+
+# The BVAR 4 with lambda = 0.3 does better than the OLS VAR 4. Using the priors helps improve the forecast accuracy even though they have the same variables and lags.The BVAR 4 with lambda = 0.03 does better in some variables compared to the VAR 1. It does better in inv, inflation, and gs10. VAR 1 does better in all others. When we turn lambda to 0.05, our coefficients become slightly worse other than one. This tells us that having less shrinkage doesn't always provide better coefficients. Using the RMSE of the winner here would not be a good forecasting strategy as the weights of the variables are not equal and the errors vary by variables.
+
+e_var4 <- actual[, "gdp"] - fc_var4[, 1]
+e_bvar <- actual[, "gdp"] - fc_bvar_03[, 1]
+
+forecast::dm.test(e_var4, e_bvar, h = 1, power = 2)
+
+e_var4 <- actual[, "infl"] - fc_var4[, 5]
+e_bvar <- actual[, "infl"] - fc_bvar_03[, 5]
+
+forecast::dm.test(e_var4, e_bvar, h = 1, power = 2)
+
+# The DM test for the GDP variable has a p value of 0.03. The results are statistically significant and we can reject the null hypothesis that the two models have equal forecast accuracy for GDP. The DM test for the inflation variable has a p value of 0.1489. The results are not statistically significant and we cannot reject the null hypothesis that the two models have equal forecast accuracy for inflation.This again supports the idea that using shrinkage depends on the variable.
