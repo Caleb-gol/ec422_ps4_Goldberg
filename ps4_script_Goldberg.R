@@ -89,9 +89,30 @@ getwd()
 liquor_cv_fit <- readRDS("results/liquor_cv_fit.rds")
 
 glimpse(liquor_cv_fit)
-# The number of forecast origins is 59.
+# The number of forecast origins is 120.
 liquor_cv_fc <- liquor_cv_fit |>
   forecast(h = 1)
 liquor_cv_fc |>
   accuracy(liquor, measures = list(RMSE = RMSE, MAE = MAE)) |> knitr:: kable(digits = 2)
 # Here we are forecasting one month ahead. The arima model has the lowest RMSE and MAE and forecasts the best. The two metrics agree that the arima model is the best.
+
+liquor_errs <- liquor_cv_fc |>
+  as_tibble() |>
+  left_join(as_tibble(liquor) |> select(Month, actual = sales),
+            by = "Month") |>
+  mutate(e = actual - .mean) |>
+  select(Month, .model, e) |>
+  pivot_wider(names_from = .model, values_from = e)
+
+forecast::dm.test(liquor_errs$arima, liquor_errs$ets, h = 1, power = 2)
+
+liquor_errs <- liquor_cv_fc |>
+  as_tibble() |>
+  left_join(as_tibble(liquor) |> select(Month, actual = sales),
+            by = "Month") |>
+  mutate(e = actual - .mean) |>
+  select(Month, .model, e) |>
+  pivot_wider(names_from = .model, values_from = e)
+
+forecast::dm.test(liquor_errs$arima, liquor_errs$snaive, h = 1, power = 2)
+# DM stat for arima vs ets is -2.9062. The p-value is 0.004042. The DM stat for arima vs snaive is -10.755. The p-value is 2.2e-16. Both p-values are less than 0.05, so we reject the null hypothesis that the two models have equal forecast accuracy. If I were the liquor store chain I would use the Arima model.
