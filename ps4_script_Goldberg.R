@@ -2,7 +2,7 @@ library(tidyverse)
 library(fpp3)
 library(BVAR)
 
-#2
+#PART 2
 
 liquor_raw <- read_csv(
   "data/MRTSSM4453USN.csv",
@@ -116,3 +116,14 @@ liquor_errs <- liquor_cv_fc |>
 
 forecast::dm.test(liquor_errs$arima, liquor_errs$snaive, h = 1, power = 2)
 # DM stat for arima vs ets is -2.9062. The p-value is 0.004042. The DM stat for arima vs snaive is -10.755. The p-value is 2.2e-16. Both p-values are less than 0.05, so we reject the null hypothesis that the two models have equal forecast accuracy. If I were the liquor store chain I would use the Arima model.
+#PART 3
+
+liquor_combo_fc <- liquor_cv_fit |>
+  mutate(combo = (arima + ets) / 2) |>
+  forecast(h = 1)
+
+liquor_combo_fc |>
+  accuracy(liquor, measures = list(RMSE = RMSE, MAE = MAE))|> knitr::kable(digits = 2)
+# Combo does slightly worse than arima itself. It still does better than ets.
+cor(liquor_errs$arima, liquor_errs$ets)
+# Using correlation between arima and ets, we can see a relatively high correlation of 0.87. Using this and the DM test, we can see the reason why the combo does not beat out the arima is because the two models are highly correlated. The combo does not add much new information to the arima model.
