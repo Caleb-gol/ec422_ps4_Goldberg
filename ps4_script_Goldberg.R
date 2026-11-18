@@ -44,3 +44,54 @@ liquor_fit |>
   augment() |>
   features(.innov, ljung_box, lag = 24, dof = 6)
 # The results tell us that p value is statistically significant and that we can reject the null hypothesis of white noise.
+
+liquor_cv_fc |>
+  accuracy(liquor, measures = list(RMSE = RMSE, MAE = MAE))
+
+
+liquor_cv <- liquor |>
+  stretch_tsibble(.init = 120, .step = 1) |>
+  filter(.id < max(.id))
+nrow(liquor_cv)
+glimpse(liquor_cv)
+system.time({
+  test_snaive <- liquor_cv |>
+    model(snaive = SNAIVE(sales))
+})
+system.time({
+  test_ets <- liquor_cv |>
+    model(ets = ETS(log(sales)))
+})
+
+system.time({
+  test_arima <- liquor_cv |>
+    model(arima = ARIMA(log(sales)))
+})
+
+nrow(liquor_cv)
+n_distinct(liquor_cv$.id)
+
+liquor |>
+  summarise(
+    observations = n(),
+    start = min(Month),
+    end = max(Month)
+  )
+saveRDS(test_ets, "results/test_ets.rds")
+list.files("results")
+liquor_cv_fit <- readRDS("results/liquor_cv_fit.rds")
+glimpse(liquor_cv_fit)
+report(liquor_cv_fit)
+liquor_cv_fit <- readRDS("results/liquor_cv_fit.rds")
+
+
+getwd()
+liquor_cv_fit <- readRDS("results/liquor_cv_fit.rds")
+
+glimpse(liquor_cv_fit)
+# The number of forecast origins is 59.
+liquor_cv_fc <- liquor_cv_fit |>
+  forecast(h = 1)
+liquor_cv_fc |>
+  accuracy(liquor, measures = list(RMSE = RMSE, MAE = MAE)) |> knitr:: kable(digits = 2)
+# Here we are forecasting one month ahead. The arima model has the lowest RMSE and MAE and forecasts the best. The two metrics agree that the arima model is the best.
