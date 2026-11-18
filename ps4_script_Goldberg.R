@@ -127,3 +127,53 @@ liquor_combo_fc |>
 # Combo does slightly worse than arima itself. It still does better than ets.
 cor(liquor_errs$arima, liquor_errs$ets)
 # Using correlation between arima and ets, we can see a relatively high correlation of 0.87. Using this and the DM test, we can see the reason why the combo does not beat out the arima is because the two models are highly correlated. The combo does not add much new information to the arima model.
+
+#PART 4
+qd_raw <- read_csv("data/fredqd_2026-09.csv", show_col_types = FALSE) |>
+  slice(-(1:2))
+
+growth <- function(x) 100 * difference(log(x))
+
+qd <- qd_raw |>
+  mutate(date = as.Date(sasdate, "%m/%d/%Y")) |>
+  transmute(date,
+            gdp    = growth(GDPC1),     # real GDP
+            cons   = growth(PCECC96),   # real consumption
+            inv    = growth(GPDIC1),    # real investment
+            emp    = growth(PAYEMS),    # payroll employment
+            infl   = growth(GDPCTPI),   # GDP price index
+            unrate = difference(UNRATE),     # unemployment rate
+            ffr    = difference(FEDFUNDS),   # federal funds rate
+            gs10   = difference(GS10)) |>    # 10-year Treasury yield
+  filter(date >= as.Date("1960-03-01"), date <= as.Date("2019-12-01"))
+
+y <- qd |> select(-date) |> as.matrix()
+
+nrow(y)
+head(y)
+
+N <- nrow(y)
+origins <- 120:(N - 1)
+actual <- y[121:N, ]
+#We will make 116 forecasts. for each variable. The first forecast is for the first quarter of 1990 and the last is for the 4th quarter of 2019.
+
+var_ols_fc <- function(z, p) {
+  e <- embed(z, p + 1)            # columns: y_t, then its lags 1 to p
+  M <- ncol(z)                    # number of variables
+  B <- coef(lm(e[, 1:M] ~ e[, -(1:M)]))
+  x <- c(1, t(z[nrow(z):(nrow(z) - p + 1), ]))   # constant, latest p lags
+  x %*% B
+}
+
+fc_var1 <- NULL
+fc_var4 <- NULL
+for (T in origins) {
+  fc_var1 <- rbind(fc_var1, var_ols_fc(y[1:T, ], 1))
+  fc_var4 <- rbind(fc_var4, var_ols_fc(y[1:T, ], 4))
+}
+
+rmse_by_var <- function(f) sqrt(colMeans((actual - f)^2))
+
+rmse_by_var(fc_var1)
+rmse_by_var(fc_var4)
+# The VAR 1 forecasts better in all eight variables besides inflation, but it's still very close. The smaller model forecasts better because it contains less parameters. The VAR 4 contains more noise that is not useful in forecasting the data.
